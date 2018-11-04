@@ -16,6 +16,12 @@ MODULE_LICENSE("GPL");
 #define MAX_BUFFER_LENGTH 256
 #define MAX_KEY_LENGTH 32
 
+#define CRYPT_IOC_MAGIC (0xAA)
+
+#define CRYPT_CREATE _IOWR(CRYPT_IOC_MAGIC, 0, char *)
+#define CRYPT_DESTROY _IOWR(CRYPT_IOC_MAGIC, 1, char *)
+#define CRYPT_CONFIGURE _IOWR(CRYPT_IOC_MAGIC, 2, char *)
+
 //holds 10 encrpyt/decrypt pairs, as well as cryptctl
 int dev_major_number = 0;
 struct cryptctl_dev *cryptctl = NULL;
@@ -58,7 +64,26 @@ static int cryptctl_close(struct inode *pinode, struct file *pfile){
 }
 
 static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg){
+	int err = 0, tmp;
+	int retval = 0;
+
+	if (_IOC_TYPE(cmd) != CRYPT_IOC_MAGIC) {
+		return -ENOTTY;
+	}
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
+	switch (cmd) {
+		case CRYPT_CREATE:
+			//create key
+			break;
+		case CRYPT_DESTROY:
+			//delete key
+			break;
+		case CRYPT_CONFIGURE:
+			//change key
+			break;
+		default:
+			return -ENOTTY;
+	}
 	return 0;
 }
 
@@ -81,7 +106,7 @@ struct file_operations ed_dev_file_operations = {
 	.release = cryptctl_close
 };
 
-int cryptctl_init(void){
+static int cryptctl_init(void){
 	dev_t device_region;
 	struct device *my_device = NULL;
 	int i;
@@ -136,7 +161,7 @@ int cryptctl_init(void){
 
 }
 
-void cryptctl_exit(void){
+static void cryptctl_exit(void){
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 	//must destroy class with class_destroy
 	
