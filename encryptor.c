@@ -6,7 +6,6 @@
 #include <linux/device.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-#include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
@@ -147,12 +146,16 @@ void cryptctl_exit(void){
 			if(cryptctl->devs[i] != NULL){
 				device_destroy(cryptctl_class, MKDEV(dev_major_number, cryptctl->devs[i]->minor_number));
 				cdev_del(&cryptctl->devs[i]->ed_cdev);
+				unregister_chrdev_region(MKDEV(dev_major_number, cryptctl->devs[i]->minor_number),1);
 				cryptctl->devs[i] = NULL;
 			}
 		}
 		//deleted all of the existing encrpyt/decrypt devices
 		device_destroy(cryptctl_class, MKDEV(dev_major_number, cryptctl->minor_number));
 		cdev_del(&cryptctl->cryptctl_cdev);
+		class_destroy(cryptctl_class);
+		unregister_chrdev_region(MKDEV(dev_major_number,cryptctl->minor_number),1);
+		cryptctl_class = NULL;
 		cryptctl = NULL;
 	}
 	
