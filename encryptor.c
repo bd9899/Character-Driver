@@ -18,9 +18,17 @@ MODULE_LICENSE("GPL");
 
 #define CRYPT_IOC_MAGIC (0xAA)
 
-#define CRYPT_CREATE _IOWR(CRYPT_IOC_MAGIC, 0, char *)
-#define CRYPT_DESTROY _IOWR(CRYPT_IOC_MAGIC, 1, char *)
-#define CRYPT_CONFIGURE _IOWR(CRYPT_IOC_MAGIC, 2, char *)
+typedef struct ioctl_input {
+	int index;
+	char key[33];
+	char buffer[257];
+} ioctl_input;
+
+#define CRYPT_CREATE _IO(CRYPT_IOC_MAGIC, 0)
+#define CRYPT_DESTROY _IOR(CRYPT_IOC_MAGIC, 1, ioctl_input)
+#define CRYPT_CONFIGURE _IOR(CRYPT_IOC_MAGIC, 2, ioctl_input)
+#define CRYPT_WRITE _IOWR(CRYPT_IOC_MAGIC, 3, ioctl_input)
+#define CRYPT_READ _IOWR(CRYPT_IOC_MAGIC, 4, ioctl_input)
 
 //holds 10 encrpyt/decrypt pairs, as well as cryptctl
 int dev_major_number = 0;
@@ -64,7 +72,7 @@ static int cryptctl_close(struct inode *pinode, struct file *pfile){
 }
 
 static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg){
-	int err = 0, tmp;
+	int err = 0;
 	int retval = 0;
 
 	if (_IOC_TYPE(cmd) != CRYPT_IOC_MAGIC) {
@@ -80,6 +88,10 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			break;
 		case CRYPT_CONFIGURE:
 			//change key
+			break;
+		case CRYPT_READ:
+			break;
+		case CRYPT_WRITE:
 			break;
 		default:
 			return -ENOTTY;
