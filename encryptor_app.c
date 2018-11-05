@@ -20,8 +20,8 @@ typedef struct configure_input {
 
 
 #define CRYPT_CREATE _IO(CRYPT_IOC_MAGIC, 0)
-#define CRYPT_DESTROY _IOR(CRYPT_IOC_MAGIC, 1, int)
-#define CRYPT_CONFIGURE _IOR(CRYPT_IOC_MAGIC, 2, configure_input)
+#define CRYPT_DESTROY _IOWR(CRYPT_IOC_MAGIC, 1, int)
+#define CRYPT_CONFIGURE _IOWR(CRYPT_IOC_MAGIC, 2, configure_input)
 
 int main() {
 	int fd;
