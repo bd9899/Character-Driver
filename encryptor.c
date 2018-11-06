@@ -9,7 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
-#include <string.h>
+#include <linux/string.h>
 
 MODULE_LICENSE("GPL");
 
@@ -30,6 +30,12 @@ typedef struct configure_input {
 #define CRYPT_CONFIGURE _IOWR(CRYPT_IOC_MAGIC, 2, configure_input)
 
 //holds 10 encrpyt/decrypt pairs, as well as cryptctl
+
+static char table[] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N',
+'O','P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s',
+'t','u','v','w','x','y','z', ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.' , '/', ':', ';', '<',
+'=', '>', '?', '`', '{', '}', '|', '~'};
+
 int dev_major_number = 0;
 struct cryptctl_dev *cryptctl = NULL;
 struct class *cryptctl_class = NULL;
@@ -37,6 +43,7 @@ struct class *cryptctl_class = NULL;
 struct encrypt_decrypt_dev{
 	char *key; //+1 is for null terminating character
 	char *message;
+	int encrypt_or_decrypt; //0 if encryptor 1 if decryptor
 	int minor_number; //minor number for this device
 	struct cdev ed_cdev;
 };
@@ -53,15 +60,17 @@ struct cryptctl_dev{
 
 static void encrypt(char *key, char *message){
 	int i;
+	int j;
+	int k;
 	int message_len = strlen(message);
 	int key_len = strlen(key);
-	int num_into_message = message_len % key_len;
-	int left_over = message_len - num_into_message*key_len;
-	
-	char *full_key = (char *)kzalloc(strlen(message_len)+1);
+	int num_into_message = message_len / key_len;
+	int left_over = message_len % key_len;
+		
+	char *full_key = (char *)kzalloc(message_len+1, GFP_KERNEL);
 	if(num_into_message > 0){
 		strcpy(full_key, key);
-		num_into_message - 1;
+		num_into_message -= 1;
 		while(num_into_message > 0){
 			strcat(full_key, key);
 			num_into_message = num_into_message - 1;
@@ -73,21 +82,33 @@ static void encrypt(char *key, char *message){
 	}
 	
 	for(i=0; i < message_len; i++){
-		message[i] = MOD((message[i] + full_key[i]) % 128);
+		for(j=0; j < 89; j++){
+			if(message[i] == table[j]){
+				for(k=0; k < 89; k++){
+					if(full_key[i] == table[k]){
+						message[i] = table[MOD((j+k),89)];
+						break;
+					}
+				}
+				break;
+			}
+		}
 	}
 }
 
 static void decrypt(char *key, char *message){
 	int i;
+	int j;
+	int k;
 	int message_len = strlen(message);
 	int key_len = strlen(key);
-	int num_into_message = message_len % key_len;
-	int left_over = message_len - num_into_message*key_len;
-	
-	char *full_key = (char *)kzalloc(strlen(message_len)+1);
+	int num_into_message = message_len / key_len;
+	int left_over = message_len % key_len;
+		
+	char *full_key = (char *)kzalloc(message_len+1, GFP_KERNEL);
 	if(num_into_message > 0){
 		strcpy(full_key, key);
-		num_into_message - 1;
+		num_into_message -= 1;
 		while(num_into_message > 0){
 			strcat(full_key, key);
 			num_into_message = num_into_message - 1;
@@ -97,10 +118,20 @@ static void decrypt(char *key, char *message){
 	if(left_over > 0){
 		strncat(full_key, key, left_over);
 	}
-	for(i=0; i < message_len; i++){
-		MOD(message[i] = (message[i] - full_key[i]) % 128);
-	}
 	
+	for(i=0; i < message_len; i++){
+		for(j=0; j < 89; j++){
+			if(message[i] == table[j]){
+				for(k=0; k < 89; k++){
+					if(full_key[i] == table[k]){
+						message[i] = table[MOD((j-k),89)];
+						break;
+					}
+				}
+				break;
+			}
+		}
+	}
 }
 
 static int cryptctl_open(struct inode *pinode, struct file *pfile){
@@ -123,7 +154,7 @@ static int cryptctl_open(struct inode *pinode, struct file *pfile){
 		pfile->private_data = cryptctl;
 		
 		if(cryptctl->buffer == NULL){
-			cryptctl->buffer = (char *)kzalloc(MAX_BUFFER_LENGTH, GFP_KERNEL);
+			cryptctl->buffer = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
 			if(cryptctl->buffer == NULL){
 				printk(KERN_ALERT "Out of memory\n");
 				return -ENOMEM;
@@ -188,6 +219,11 @@ static ssize_t ed_dev_read(struct file *pfile, char __user *buffer, size_t count
 	struct encrypt_decrypt_dev *dev = (struct encrypt_decrypt_dev *)pfile->private_data;
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 
+	if(dev->encrypt_or_decrypt == 0){ //encrypt
+		encrypt(dev->key, dev->message);
+	}else{
+		decrypt(dev->key, dev->message);
+	}
 	
 	if(*offset >= MAX_BUFFER_LENGTH){
 		return retval;
@@ -206,19 +242,25 @@ static ssize_t ed_dev_read(struct file *pfile, char __user *buffer, size_t count
 }
 
 static ssize_t cryptctl_write(struct file *pfile, const char __user *buffer, size_t count, loff_t *offset){
+	ssize_t retval = 0;	
 	struct cryptctl_dev *dev = (struct cryptctl_dev *)pfile->private_data;
-	ssize_t retval = 0;
+	
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
+	if(dev->buffer != NULL){
+		kfree(dev->buffer);
+		dev->buffer = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
+		*offset = 0;
+	}
 	if(dev != cryptctl){
 		printk(KERN_ALERT "pfile private data is not equal to cryptctl\n");
 		return -ENODEV;
 	}
 	
-	if(*offset >= MAX_BUFFER_LENGTH){
+	if(*offset >= MAX_BUFFER_LENGTH+1){
 		retval = -EINVAL;
 		return retval;
 	}
-	if(*offset + count > MAX_BUFFER_LENGTH){
+	if(*offset + count > MAX_BUFFER_LENGTH+1){
 		count = MAX_BUFFER_LENGTH - *offset;
 	}
 	if(copy_from_user(&(dev->buffer[*offset]), buffer, count) != 0){
@@ -232,8 +274,30 @@ static ssize_t cryptctl_write(struct file *pfile, const char __user *buffer, siz
 }
 
 static ssize_t ed_dev_write(struct file *pfile, const char __user *buffer, size_t count, loff_t *offset){
+	ssize_t retval = 0;	
+	struct encrypt_decrypt_dev *dev = (struct encrypt_decrypt_dev *)pfile->private_data;
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
-	return count;
+	
+	if(dev->message != NULL){
+		kfree(dev->message);
+		dev->message = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
+		*offset = 0;
+	}
+	if(*offset >= MAX_BUFFER_LENGTH+1){
+		retval = -EINVAL;
+		return retval;
+	}
+	if(*offset + count > MAX_BUFFER_LENGTH+1){
+		count = MAX_BUFFER_LENGTH - *offset;
+	}
+	if(copy_from_user(&(dev->message[*offset]), buffer, count) != 0){
+		retval = -EFAULT;
+		return retval;
+	}
+	
+	*offset += count;
+	retval = count;
+	return retval;
 }
 
 static int cryptctl_close(struct inode *pinode, struct file *pfile){
@@ -242,7 +306,7 @@ static int cryptctl_close(struct inode *pinode, struct file *pfile){
 }
 
 static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg){
-	int err = 0;
+/* 	int err = 0;
 	int retval = 0;
 
 	if (_IOC_TYPE(cmd) != CRYPT_IOC_MAGIC) {
@@ -261,7 +325,7 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			break;
 		default:
 			return -ENOTTY;
-	}
+	} */
 	return 0;
 }
 
