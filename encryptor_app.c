@@ -103,7 +103,7 @@ int main() {
 				else {
 					printf("\nEnter the key to configure (32 char max, will be trimmed if longer): ");
 					//fgets(key, 33, stdin);
-					scanf("%32[^\n]s", key);
+					scanf("%32s", key);
 					fseek(stdin,0,SEEK_END);
 					strcpy(config.key, key);
 					config.index = index;
@@ -179,7 +179,7 @@ int main() {
 					buffer = (char *)malloc(257);
 					printf("\nEnter a message to encrypt/decrypt (max length is 256): ");
 					//fgets(buffer, 257, stdin);
-					scanf("%256[^\n]s", buffer);
+					scanf("%256s", buffer);
 					fseek(stdin,0,SEEK_END);
 					while((ret_val = write(read_write_fd, buffer, strlen(buffer)+1)) != strlen(buffer)+1){
 						//printf("RET VAL: %ld\n", ret_val);
