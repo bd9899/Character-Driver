@@ -23,6 +23,12 @@ typedef struct configure_input {
 #define CRYPT_DESTROY _IOWR(CRYPT_IOC_MAGIC, 1, int)
 #define CRYPT_CONFIGURE _IOWR(CRYPT_IOC_MAGIC, 2, configure_input)
 
+void cleanup(int fd){
+	for (int i = 0; i <= 9; i++){
+		ioctl(fd, CRYPT_DESTROY, i)
+	}
+}
+
 int main() {
 	int fd;
 	int encrypt_fd;
@@ -67,7 +73,7 @@ int main() {
 						printf("Index is out of bounds\n");
 					}
 					else {
-						retval = ioctl(fd, CRYPT_DESTROY, &index);
+						retval = ioctl(fd, CRYPT_DESTROY, index);
 						if (retval < 0) {
 							printf("Index doesn't exist\n");
 						}
@@ -197,5 +203,6 @@ int main() {
 
 	}
 	close(fd);
+	atexit(cleanup);
 	return 0;
 }
