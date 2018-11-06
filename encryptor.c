@@ -46,6 +46,7 @@ struct encrypt_decrypt_dev{
 	char *message;
 	int encrypt_or_decrypt; //0 if encryptor 1 if decryptor
 	int minor_number; //minor number for this device
+	int read_from; //so doesn't continously encrypt/decrypt
 	struct cdev ed_cdev;
 };
 
@@ -141,7 +142,7 @@ static int cryptctl_open(struct inode *pinode, struct file *pfile){
 	unsigned int minor = iminor(pinode);
 	
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
-	
+
 	if(major != dev_major_number || minor < 0){
 		printk(KERN_ALERT "No device found with major %d and minor %d\n", major, minor);
 		return -ENODEV;
@@ -221,18 +222,27 @@ static ssize_t ed_dev_read(struct file *pfile, char __user *buffer, size_t count
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 	
 	if(dev->key == NULL){
-		return -5;
+		//printk(KERN_ALERT "IN KEY: %ld\n", retval);
+		retval = -1;
+		return retval;
 	}
 	if(dev->message == NULL){
-		return -6;
+		//printk(KERN_ALERT "IN MESSAGE: %ld\n", retval);
+		retval = -1;
+		return retval;
 	}
-	if(dev->encrypt_or_decrypt == 0){ //encrypt
-		encrypt(dev->key, dev->message);
-	}else{
-		decrypt(dev->key, dev->message);
+	if(dev->read_from == 0){
+		if(dev->encrypt_or_decrypt == 0){ //encrypt
+			encrypt(dev->key, dev->message);
+			dev->read_from = 1;
+		}else{
+			decrypt(dev->key, dev->message);
+			dev->read_from = 1;
+		}
 	}
 	
 	if(*offset >= MAX_BUFFER_LENGTH){
+		//printk(KERN_ALERT "IN OFFSET: %ld\n", retval);
 		return retval;
 	}
 	if(*offset+count > MAX_BUFFER_LENGTH){
@@ -244,7 +254,9 @@ static ssize_t ed_dev_read(struct file *pfile, char __user *buffer, size_t count
 		return retval;
 	}	
 	*offset += count;
+	
 	retval =  count;
+	//printk(KERN_ALERT "Count: %ld\n", retval);
 	return retval;
 }
 
@@ -255,9 +267,9 @@ static ssize_t cryptctl_write(struct file *pfile, const char __user *buffer, siz
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 	if(dev->buffer != NULL){
 		kfree(dev->buffer);
-		dev->buffer = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
 		*offset = 0;
 	}
+	dev->buffer = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
 	if(dev != cryptctl){
 		printk(KERN_ALERT "pfile private data is not equal to cryptctl\n");
 		return -ENODEV;
@@ -286,20 +298,22 @@ static ssize_t ed_dev_write(struct file *pfile, const char __user *buffer, size_
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 	
 	if(dev->key == NULL){
-		return -5;
+		return -EINVAL;
 	}
 	if(dev->message != NULL){
 		kfree(dev->message);
-		dev->message = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
 		*offset = 0;
 	}
+	dev->message = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
+	dev->read_from = 0;
 	if(*offset >= MAX_BUFFER_LENGTH+1){
-		retval = -EINVAL;
+		retval = -EFBIG;
 		return retval;
 	}
 	if(*offset + count > MAX_BUFFER_LENGTH+1){
 		count = MAX_BUFFER_LENGTH - *offset;
 	}
+
 	if(copy_from_user(&(dev->message[*offset]), buffer, count) != 0){
 		retval = -EFAULT;
 		return retval;
@@ -365,7 +379,7 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			}else{
 				snprintf(num, 3, "%ld", retval);
 			}
-			printk(KERN_ALERT "Num: %s\n", num);
+			//printk(KERN_ALERT "Num: %s\n", num);
 			strcat(name_enc, num);
 			strcat(name_dec, num);
 			device_region_enc = MKDEV(dev_major_number, 1+i);
@@ -392,6 +406,7 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			cryptctl->devs[i]->message = NULL;
 			cryptctl->devs[i]->key = NULL;
 			cryptctl->devs[i]->encrypt_or_decrypt = 0;
+			cryptctl->devs[i]->read_from = 0;
 			cryptctl->devs[i]->minor_number = MINOR(device_region_enc);
 			cdev_init(&cryptctl->devs[i]->ed_cdev, &ed_dev_file_operations);
 			cryptctl->devs[i]->ed_cdev.owner = THIS_MODULE;
@@ -401,10 +416,11 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			cryptctl->devs[i+1]->message = NULL;
 			cryptctl->devs[i+1]->key = NULL;
 			cryptctl->devs[i+1]->encrypt_or_decrypt = 1;
+			cryptctl->devs[i+1]->read_from = 0;
 			cryptctl->devs[i+1]->minor_number = MINOR(device_region_dec);
 			cdev_init(&cryptctl->devs[i+1]->ed_cdev, &ed_dev_file_operations);
 			cryptctl->devs[i+1]->ed_cdev.owner = THIS_MODULE;
-			err2 = cdev_add(&cryptctl->devs[i]->ed_cdev, device_region_dec, 1);
+			err2 = cdev_add(&cryptctl->devs[i+1]->ed_cdev, device_region_dec, 1);
 			
 			if(err !=0 || err2 != 0){
 				printk(KERN_ALERT "Failed to create encrypt/decrypt pair\n");
@@ -475,9 +491,15 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			
 			if(cryptctl->devs[enc_index]->key != NULL){ //reconfigure key
 				kfree((void *)cryptctl->devs[enc_index]->key);
-				kfree((void *)cryptctl->devs[enc_index]->key);
+				kfree((void *)cryptctl->devs[enc_index]->message);
+				cryptctl->devs[enc_index]->message = NULL;
+				kfree((void *)cryptctl->devs[dec_index]->key);
+				kfree((void *)cryptctl->devs[dec_index]->message);
+				cryptctl->devs[dec_index]->message = NULL;
+				
 			}
-			
+			cryptctl->devs[enc_index]->read_from = 0;
+			cryptctl->devs[dec_index]->read_from = 0;
 			cryptctl->devs[enc_index]->key = (char *)kzalloc(strlen(data->key)+1, GFP_KERNEL);
 			cryptctl->devs[dec_index]->key = (char *)kzalloc(strlen(data->key)+1, GFP_KERNEL);
 			strcpy(cryptctl->devs[enc_index]->key, data->key);
