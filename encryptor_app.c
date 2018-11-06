@@ -92,7 +92,8 @@ int main() {
 				}
 				else {
 					printf("Enter the key to configure (32 char max, will be trimmed if longer): ");
-					fgets(key, 33, stdin);
+					//fgets(key, 33, stdin);
+					scanf("%32s", key);
 					strcpy(config.key, key);
 					config.index = index;
 					ret_val = ioctl(fd, CRYPT_CONFIGURE, &config);
@@ -107,8 +108,10 @@ int main() {
 			case 'R':
 				
 				printf("Enter the name of the device you want to read from (cryptEncryptXX or cryptDecryptXX): ");
-				fgets(dev, 15, stdin);
+				//fgets(dev, 15, stdin);
+				scanf("%14s", dev);
 				strcat(dev_path, dev);
+				printf("\nDEVPATH: %s\n\n", dev_path);
 				read_write_fd = open(dev_path,O_RDWR);
 				if(read_write_fd < 0){
 					printf("Invalid device name\n");
@@ -118,8 +121,11 @@ int main() {
 					}
 					buffer = (char *)malloc(257);
 					while((ret_val = read(read_write_fd, buffer, 256)) != 0){
-						if(ret_val == -1){
+						if(ret_val == -5){
 							printf("Device needs to be configured with a key first\n");
+							break;
+						}else if(ret_val == -6){
+							printf("There is no message in this device\n");
 							break;
 						}
 						count = count + ret_val;
@@ -136,7 +142,8 @@ int main() {
 				break;
 			case 'W':
 				printf("Enter the name of the device you want to write to (cryptEncryptXX or cryptDecryptXX): ");
-				fgets(dev, 15, stdin);
+				//fgets(dev, 15, stdin);
+				scanf("%14s", dev);
 				strcat(dev_path, dev);
 				read_write_fd = open(dev_path,O_RDWR);
 				if(read_write_fd < 0){
@@ -147,7 +154,8 @@ int main() {
 					}
 					buffer = (char *)malloc(257);
 					printf("Enter a message to encrypt/decrypt (max length is 256): ");
-					fgets(buffer, 257, stdin);
+					//fgets(buffer, 257, stdin);
+					scanf("%256s", buffer);
 					count = strlen(buffer);
 					while((ret_val = write(read_write_fd, buffer, 256)) != 0){
 						if(ret_val == -1){

@@ -223,6 +223,9 @@ static ssize_t ed_dev_read(struct file *pfile, char __user *buffer, size_t count
 	if(dev->key == NULL){
 		return -5;
 	}
+	if(dev->message == NULL){
+		return -6;
+	}
 	if(dev->encrypt_or_decrypt == 0){ //encrypt
 		encrypt(dev->key, dev->message);
 	}else{
@@ -368,8 +371,9 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 			device_region_enc = MKDEV(dev_major_number, 1+i);
 			device_region_dec = MKDEV(dev_major_number, 2+i);
 			
-			
-			ed_dev_class = class_create(THIS_MODULE, "ed_dev");
+			if(ed_dev_class == NULL){
+				ed_dev_class = class_create(THIS_MODULE, "ed_dev");
+			}
 			if(IS_ERR(ed_dev_class)){
 				printk(KERN_ALERT "class_create() failed\n");
 				retval = -2;
