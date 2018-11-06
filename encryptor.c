@@ -39,6 +39,7 @@ static char table[] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','
 int dev_major_number = 0;
 struct cryptctl_dev *cryptctl = NULL;
 struct class *cryptctl_class = NULL;
+struct class *ed_dev_class = NULL;
 
 struct encrypt_decrypt_dev{
 	char *key; //+1 is for null terminating character
@@ -218,7 +219,10 @@ static ssize_t ed_dev_read(struct file *pfile, char __user *buffer, size_t count
 	ssize_t retval = 0;	
 	struct encrypt_decrypt_dev *dev = (struct encrypt_decrypt_dev *)pfile->private_data;
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
-
+	
+	if(dev->key == NULL){
+		return -5;
+	}
 	if(dev->encrypt_or_decrypt == 0){ //encrypt
 		encrypt(dev->key, dev->message);
 	}else{
@@ -278,6 +282,9 @@ static ssize_t ed_dev_write(struct file *pfile, const char __user *buffer, size_
 	struct encrypt_decrypt_dev *dev = (struct encrypt_decrypt_dev *)pfile->private_data;
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 	
+	if(dev->key == NULL){
+		return -5;
+	}
 	if(dev->message != NULL){
 		kfree(dev->message);
 		dev->message = (char *)kzalloc(MAX_BUFFER_LENGTH+1, GFP_KERNEL);
@@ -305,9 +312,30 @@ static int cryptctl_close(struct inode *pinode, struct file *pfile){
 	return 0;
 }
 
+struct file_operations ed_dev_file_operations = {
+	.owner   = THIS_MODULE,
+	.open    = cryptctl_open,
+	.read    = ed_dev_read,
+	.write   = ed_dev_write,
+	.release = cryptctl_close
+};
+
 static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg){
-/* 	int err = 0;
-	int retval = 0;
+	int err = 0;
+	long retval = 0;
+	int err2;
+	int i;
+	char name_enc[15] = "cryptEncrypt";
+	char name_dec[15] = "cryptDecrypt";
+	char num[3];
+	dev_t device_region_enc;
+	dev_t device_region_dec;
+	struct device *my_device_enc = NULL;
+	struct device *my_device_dec = NULL;
+	int *arg_num;
+	int enc_index;
+	int dec_index;
+	configure_input *data;
 
 	if (_IOC_TYPE(cmd) != CRYPT_IOC_MAGIC) {
 		return -ENOTTY;
@@ -315,17 +343,146 @@ static long cryptctl_ioctl(struct file *pfile, unsigned int cmd, unsigned long a
 	printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
 	switch (cmd) {
 		case CRYPT_CREATE:
-			//create key
-			break;
+			//create pair
+			;
+
+			for(i=0; i<MAX_COUNT; i++){
+				if(cryptctl->devs[i] == NULL){
+					break;
+				}
+			}
+			printk(KERN_ALERT "Inside %s\n", __FUNCTION__);
+			if(i==MAX_COUNT){ //no spots available
+				retval = -1;
+				return retval;
+			}
+			retval = i/2; //number for pair
+			if(retval >= 0 && retval < 10){
+				snprintf(num, 2, "%ld", retval);
+			}else{
+				snprintf(num, 3, "%ld", retval);
+			}
+			printk(KERN_ALERT "Num: %s\n", num);
+			strcat(name_enc, num);
+			strcat(name_dec, num);
+			device_region_enc = MKDEV(dev_major_number, 1+i);
+			device_region_dec = MKDEV(dev_major_number, 2+i);
+			
+			
+			ed_dev_class = class_create(THIS_MODULE, "ed_dev");
+			if(IS_ERR(ed_dev_class)){
+				printk(KERN_ALERT "class_create() failed\n");
+				retval = -2;
+				return retval;
+			}
+			
+			err = register_chrdev_region(device_region_enc, 1, name_enc);
+			err2 = register_chrdev_region(device_region_dec, 1, name_dec);
+			if(err < 0 || err2 < 0){
+				printk(KERN_ALERT "register_chrdev_region() failed\n");
+				retval = -2;
+				return retval;
+			}
+
+			cryptctl->devs[i] = (struct encrypt_decrypt_dev *)kmalloc(sizeof(struct encrypt_decrypt_dev), GFP_KERNEL);
+			cryptctl->devs[i]->message = NULL;
+			cryptctl->devs[i]->key = NULL;
+			cryptctl->devs[i]->encrypt_or_decrypt = 0;
+			cryptctl->devs[i]->minor_number = MINOR(device_region_enc);
+			cdev_init(&cryptctl->devs[i]->ed_cdev, &ed_dev_file_operations);
+			cryptctl->devs[i]->ed_cdev.owner = THIS_MODULE;
+			err = cdev_add(&cryptctl->devs[i]->ed_cdev, device_region_enc, 1);
+			
+			cryptctl->devs[i+1] = (struct encrypt_decrypt_dev *)kmalloc(sizeof(struct encrypt_decrypt_dev), GFP_KERNEL);
+			cryptctl->devs[i+1]->message = NULL;
+			cryptctl->devs[i+1]->key = NULL;
+			cryptctl->devs[i+1]->encrypt_or_decrypt = 1;
+			cryptctl->devs[i+1]->minor_number = MINOR(device_region_dec);
+			cdev_init(&cryptctl->devs[i+1]->ed_cdev, &ed_dev_file_operations);
+			cryptctl->devs[i+1]->ed_cdev.owner = THIS_MODULE;
+			err2 = cdev_add(&cryptctl->devs[i]->ed_cdev, device_region_dec, 1);
+			
+			if(err !=0 || err2 != 0){
+				printk(KERN_ALERT "Failed to create encrypt/decrypt pair\n");
+				retval = -2;
+				return retval;
+			}
+			
+			my_device_enc = device_create(ed_dev_class, NULL, device_region_enc, NULL, name_enc);
+			my_device_dec = device_create(ed_dev_class, NULL, device_region_dec, NULL, name_dec);
+			
+			if(IS_ERR(my_device_enc) != 0 || IS_ERR(my_device_dec) != 0){
+				retval = -2;
+				printk(KERN_ALERT "device_create() for encrpyt/decrypt pair creation failed\n");
+				cdev_del(&cryptctl->devs[i]->ed_cdev);
+				cdev_del(&cryptctl->devs[i+1]->ed_cdev);
+				unregister_chrdev_region(device_region_enc, 1);
+				unregister_chrdev_region(device_region_dec, 1);
+				return retval;
+			}
+	
+			return retval;
 		case CRYPT_DESTROY:
-			//delete key
-			break;
+			//delete pair
+			arg_num = (int *)kzalloc(sizeof(int), GFP_KERNEL);
+
+			if(copy_from_user(arg_num, (int *)arg, sizeof(int)) != 0){
+				retval = -2;
+				return retval;
+			}
+			
+			enc_index = *(arg_num)*2;
+			dec_index = enc_index+1;
+			
+			if(cryptctl->devs[enc_index] == NULL || cryptctl->devs[dec_index] == NULL){
+				retval = -1; //doesn't exist
+				return retval;
+			}
+			
+			device_destroy(ed_dev_class, MKDEV(dev_major_number, cryptctl->devs[enc_index]->minor_number));
+			cdev_del(&cryptctl->devs[enc_index]->ed_cdev);
+			unregister_chrdev_region(MKDEV(dev_major_number, cryptctl->devs[enc_index]->minor_number),1);
+			kfree((void *)cryptctl->devs[enc_index]->message);
+			kfree((void *)cryptctl->devs[enc_index]->key);
+			cryptctl->devs[enc_index] = NULL;
+			
+			device_destroy(ed_dev_class, MKDEV(dev_major_number, cryptctl->devs[dec_index]->minor_number));
+			cdev_del(&cryptctl->devs[dec_index]->ed_cdev);
+			unregister_chrdev_region(MKDEV(dev_major_number, cryptctl->devs[dec_index]->minor_number),1);
+			kfree((void *)cryptctl->devs[dec_index]->message);
+			kfree((void *)cryptctl->devs[dec_index]->key);
+			cryptctl->devs[dec_index] = NULL;
+			
+			return retval;
 		case CRYPT_CONFIGURE:
 			//change key
-			break;
+			data = (configure_input *)kzalloc(sizeof(configure_input), GFP_KERNEL);
+			if(copy_from_user(data, (configure_input *)arg, sizeof(configure_input)) != 0){
+				retval = -2;
+				return retval;
+			}
+			
+			enc_index = data->index * 2;
+			dec_index = enc_index + 1;
+			if(cryptctl->devs[enc_index] == NULL || cryptctl->devs[dec_index] == NULL){
+				retval = -1; //doesn't existing
+				return retval;
+			}
+			
+			if(cryptctl->devs[enc_index]->key != NULL){ //reconfigure key
+				kfree((void *)cryptctl->devs[enc_index]->key);
+				kfree((void *)cryptctl->devs[enc_index]->key);
+			}
+			
+			cryptctl->devs[enc_index]->key = (char *)kzalloc(strlen(data->key)+1, GFP_KERNEL);
+			cryptctl->devs[dec_index]->key = (char *)kzalloc(strlen(data->key)+1, GFP_KERNEL);
+			strcpy(cryptctl->devs[enc_index]->key, data->key);
+			strcpy(cryptctl->devs[dec_index]->key, data->key);
+			
+			return retval;
 		default:
 			return -ENOTTY;
-	} */
+	}
 	return 0;
 }
 
@@ -340,13 +497,7 @@ struct file_operations crpytctl_file_operations = {
 	.unlocked_ioctl = cryptctl_ioctl
 };
 
-struct file_operations ed_dev_file_operations = {
-	.owner   = THIS_MODULE,
-	.open    = cryptctl_open,
-	.read    = ed_dev_read,
-	.write   = ed_dev_write,
-	.release = cryptctl_close
-};
+
 
 static int cryptctl_init(void){
 	dev_t device_region;
@@ -397,6 +548,7 @@ static int cryptctl_init(void){
 		err = PTR_ERR(my_device);
 		printk(KERN_ALERT "device_create() for cryptctl creation\n");
 		cdev_del(&cryptctl->cryptctl_cdev);
+		unregister_chrdev_region(device_region, 1);
 		return err;
 	}
 	
@@ -412,8 +564,10 @@ static void cryptctl_exit(void){
 		int i;
 		for(i=0; i < MAX_COUNT; i++){
 			if(cryptctl->devs[i] != NULL){
-				device_destroy(cryptctl_class, MKDEV(dev_major_number, cryptctl->devs[i]->minor_number));
+				device_destroy(ed_dev_class, MKDEV(dev_major_number, cryptctl->devs[i]->minor_number));
 				cdev_del(&cryptctl->devs[i]->ed_cdev);
+				kfree((void *)cryptctl->devs[i]->message);
+				kfree((void *)cryptctl->devs[i]->key);
 				unregister_chrdev_region(MKDEV(dev_major_number, cryptctl->devs[i]->minor_number),1);
 				cryptctl->devs[i] = NULL;
 			}
@@ -423,6 +577,7 @@ static void cryptctl_exit(void){
 		cdev_del(&cryptctl->cryptctl_cdev);
 		kfree((void *)cryptctl->buffer);
 		class_destroy(cryptctl_class);
+		class_destroy(ed_dev_class);
 		unregister_chrdev_region(MKDEV(dev_major_number,cryptctl->minor_number),1);
 		cryptctl_class = NULL;
 		cryptctl = NULL;

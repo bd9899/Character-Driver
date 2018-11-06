@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/stath.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -25,22 +25,24 @@ typedef struct configure_input {
 
 void cleanup(int fd){
 	for (int i = 0; i <= 9; i++){
-		ioctl(fd, CRYPT_DESTROY, i)
+		ioctl(fd, CRYPT_DESTROY, &i);
 	}
 }
 
 int main() {
 	int fd;
-	int encrypt_fd;
-	int decrypt_fd;
+	int read_write_fd;
 	int loop = 1;
 	int num_pairs = 0;
 	int index;
-	int retval;
+	int encrypt_decrypt;
+	long ret_val;
 	char key[33];
-	char buffer[257];
+	char *buffer = NULL;
+	char dev_path[20] = "/dev/";
+	char dev[15];
 	char type; //C - Create D - Destroy O - cOnfigure R - Read W - Write
-
+	ssize_t count = -1;
 	configure_input config = {0, ""};
 
 	fd = open("/dev/cryptctl", O_RDWR);
@@ -48,161 +50,127 @@ int main() {
 		printf("Cannot open device file\n");
 		return 1;
 	}
-
+	
+	
 	while (loop) {
-		printf("Enter an input (C - Create; D - Destroy; O - cOnfigure; R - Read; W - Write; B - Stop) for kernel action:\n");
+		printf("Enter an input (C - Create; D - Destroy; O - cOnfigure; R - Read; W - Write; B - Stop) for kernel action: ");
 		scanf("%c", &type);
 		switch (type) {
 			case 'C':
-				if (num_pairs >= 10) {
+				ret_val = ioctl(fd, CRYPT_CREATE, NULL);
+				
+				if(ret_val == -1){
 					printf("Too many pairs, please destroy (D) a pair\n");
+				}else if(ret_val < -1){
+					printf("Error creating device pair\n");
+				}else{
+					printf("Encryption/Decryption Pair ID: %ld\n", ret_val);
 				}
-				else {
-					num_pairs += 1;
-					ioctl(fd, CRYPT_CREATE);
-				}
+
 				break;
 			case 'D':
-				if (num_pairs <= 0) {
-					printf("No pairs to destroy, please create (C) a pair\n");
-				} 
+				printf("Enter the Encryption/Decryption Pair ID you want destroyed (0-9): ");
+				scanf("%d", &index);
+				if (index < 0 || index > 10) {
+					printf("ID is out of bounds\n");
+				}
 				else {
-					printf("Enter the index you want destroyed (0-9):\n");
-					scanf("%d", &index);
-					if (index < 0 || index > 10) {
-						printf("Index is out of bounds\n");
-					}
-					else {
-						retval = ioctl(fd, CRYPT_DESTROY, index);
-						if (retval < 0) {
-							printf("Index doesn't exist\n");
-						}
-						else {
-							num_pairs -= 1;
-						}
+					ret_val = ioctl(fd, CRYPT_DESTROY, &index);
+					if (ret_val == -1) {
+						printf("No pair exists with the given ID\n");
+					}else if(ret_val < -1){
+						printf("Error in copy_from_user()\n");
 					}
 				}
+			
 				break;
 			case 'O':
-				if (num_pairs <= 0) {
-					printf("No pairs to destroy, please create (C) a pair\n");
-				} 
+				printf("Enter the ID of the pair you want configured (0-9): ");
+				scanf("%d", &index);
+				if (index < 0 || index > 10) {
+					printf("Index is out of bounds\n");
+				}
 				else {
-					printf("Enter the index you want destroyed (0-9):\n");
-					scanf("%d", &index);
-					if (index < 0 || index > 10) {
-						printf("Index is out of bounds\n");
-					}
-					else {
-						printf("Enter the key to configure (32 char max):\n");
-						fgets(key, 33, stdin);
-						strcpy(config.key, key);
-						config.index = index;
-						retval = ioctl(fd, CRYPT_DESTROY, &config);
-						if (retval < 0) {
-							printf("Index doesn't exist\n");
-						}
+					printf("Enter the key to configure (32 char max, will be trimmed if longer): ");
+					fgets(key, 33, stdin);
+					strcpy(config.key, key);
+					config.index = index;
+					ret_val = ioctl(fd, CRYPT_CONFIGURE, &config);
+					if (ret_val == -1) {
+						printf("ID doesn't exist\n");
+					}else if(ret_val < -1){
+						printf("Error with copy_from_user()\n");
 					}
 				}
+				//}
 				break;
 			case 'R':
-				if (num_pairs <= 0) {
-					printf("No pairs to read from, please create (C) a pair\n");
-				} 
-				else {
-					printf("Enter the index you want to read from (0-9):\n");
-					scanf("%d", &index);
-					printf("Enter the message (256 char max):\n");
-					fgets(buffer, 257, stdin);
-					switch(index) {
-						case 0:
-						
-							break;
-						case 1:
-							
-							break;
-						case 2:
-							
-							break;
-						case 3:
-							
-							break;
-						case 4:
-							
-							break;
-						case 5:
-							
-							break;
-						case 6:
-							
-							break;
-						case 7:
-							
-							break;
-						case 8:
-							
-							break;
-						case 9:
-							
-							break;
-						default:
-							printf("Index out of bounds, please enter an index from 0-9")
+				
+				printf("Enter the name of the device you want to read from (cryptEncryptXX or cryptDecryptXX): ");
+				fgets(dev, 15, stdin);
+				strcat(dev_path, dev);
+				read_write_fd = open(dev_path,O_RDWR);
+				if(read_write_fd < 0){
+					printf("Invalid device name\n");
+				}else{
+					if(buffer != NULL){
+						free((void *)buffer);
 					}
+					buffer = (char *)malloc(257);
+					while((ret_val = read(read_write_fd, buffer, 256)) != 0){
+						if(ret_val == -1){
+							printf("Device needs to be configured with a key first\n");
+							break;
+						}
+						count = count + ret_val;
+					}
+					
+					if(ret_val == 0){
+						buffer[count] = '\0';
+						printf("Message: %s\n", buffer);
+					}
+					close(read_write_fd);
 				}
+				
+							
 				break;
 			case 'W':
-				if (num_pairs <= 0) {
-					printf("No pairs to write to, please create (C) a pair\n");
-				} 
-				else {
-					printf("Enter the index you want to write to (0-9):\n");
-					scanf("%d", &index);
-					printf("Enter the message(256 char max):\n");
-					fgets(buffer, 257, stdin);
-					switch(index) {
-						case 0:
-							break;
-						case 1:
-							
-							break;
-						case 2:
-							
-							break;
-						case 3:
-							
-							break;
-						case 4:
-							
-							break;
-						case 5:
-							
-							break;
-						case 6:
-							
-							break;
-						case 7:
-							
-							break;
-						case 8:
-							
-							break;
-						case 9:
-							
-							break;
-						default:
-							printf("Index out of bounds, please enter an index from 0-9")
+				printf("Enter the name of the device you want to write to (cryptEncryptXX or cryptDecryptXX): ");
+				fgets(dev, 15, stdin);
+				strcat(dev_path, dev);
+				read_write_fd = open(dev_path,O_RDWR);
+				if(read_write_fd < 0){
+					printf("Invalid device name\n");
+				}else{
+					if(buffer != NULL){
+						free((void *)buffer);
 					}
+					buffer = (char *)malloc(257);
+					printf("Enter a message to encrypt/decrypt (max length is 256): ");
+					fgets(buffer, 257, stdin);
+					count = strlen(buffer);
+					while((ret_val = write(read_write_fd, buffer, 256)) != 0){
+						if(ret_val == -1){
+							printf("Device needs to be configured with a key first\n");
+							break;
+						}
+						count = count - ret_val;
+					}
+					
+					close(read_write_fd);
 				}
+
 				break;
 			case 'B':
 				loop = 0;
 				break;
+			case '\n': break;
+			
 			default:
 				printf("Invalid input\n");
 		}
 
 	}
 	close(fd);
-	atexit(cleanup);
 	return 0;
 }
