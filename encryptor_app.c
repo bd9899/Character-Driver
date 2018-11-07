@@ -138,7 +138,7 @@ int main() {
 				break;
 			//Writes to device, give device to be read from. Must be called before reading from device.
 			case 'W':
-				printf("\nEnter the name of the device you want to write to (cryptEncryptXX or cryptDecryptXX): ");
+				printf("\nEnter the name of the device you want to write to (cryptEncryptX or cryptDecryptX): ");
 				//fgets(dev, 15, stdin);
 				if(dev_path != NULL){
 					free(dev_path);
@@ -182,7 +182,7 @@ int main() {
 			//Reads from device, give device to be read from. Can only be called after writing to the device.
 			case 'R':
 				
-				printf("\nEnter the name of the device you want to read from (cryptEncryptXX or cryptDecryptXX): ");
+				printf("\nEnter the name of the device you want to read from (cryptEncryptX or cryptDecryptX): ");
 				//fgets(dev, 15, stdin);
 				if(dev_path != NULL){
 					free(dev_path);
