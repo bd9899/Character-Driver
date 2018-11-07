@@ -25,12 +25,6 @@ typedef struct configure_input {
 #define CRYPT_DESTROY _IOWR(CRYPT_IOC_MAGIC, 1, int)
 #define CRYPT_CONFIGURE _IOWR(CRYPT_IOC_MAGIC, 2, configure_input)
 
-void cleanup(int fd){
-	for (int i = 0; i <= 9; i++){
-		ioctl(fd, CRYPT_DESTROY, &i);
-	}
-}
-
 int main() {
 	int fd;
 	int read_write_fd;
@@ -54,7 +48,7 @@ int main() {
 		return 1;
 	}
 	
-	
+	//Loop for taking in commands. Can create, destroy, configure, read, write, or stop.
 	while (loop) {
 		if(dont_print){
 			printf("\nEnter an input (C - Create; D - Destroy; O - Configure/Change Key; R - Read; W - Write; B - Stop) for kernel action: ");
@@ -64,6 +58,7 @@ int main() {
 		scanf("%1c", &type);
 		fseek(stdin,0,SEEK_END);
 		switch (type) {
+			//Create devices, returns pair id
 			case 'C':
 				ret_val = ioctl(fd, CRYPT_CREATE, NULL);
 				
@@ -76,6 +71,7 @@ int main() {
 				}
 
 				break;
+			//Destroys devices, give index of pair id to be destroyed
 			case 'D':
 				printf("\nEnter the Encryption/Decryption Pair ID you want destroyed (0-9): ");
 				scanf("%d", &index);
@@ -91,8 +87,9 @@ int main() {
 						printf("\nError in copy_from_user()\n");
 					}
 				}
-			
+
 				break;
+			//Configures devices, give index of pair id to be configured as well as the key for the pair
 			case 'O':
 				printf("\nEnter the ID of the pair you want configured (0-9): ");
 				scanf("%d", &index);
@@ -114,48 +111,9 @@ int main() {
 						printf("\nError with copy_from_user()\n");
 					}
 				}
-				//}
+
 				break;
-			case 'R':
-				
-				printf("\nEnter the name of the device you want to read from (cryptEncryptXX or cryptDecryptXX): ");
-				//fgets(dev, 15, stdin);
-				if(dev_path != NULL){
-					free(dev_path);
-				}
-				dev_path = (char*)malloc(20);
-				strcpy(dev_path, "/dev/");
-				scanf("%14s", dev);
-				fseek(stdin,0,SEEK_END);
-				strcat(dev_path, dev);
-				//printf("DEVPATH: %s\n", dev_path);
-				read_write_fd = open(dev_path,O_RDWR);
-				if(read_write_fd < 0){
-					printf("\nInvalid device name\n");
-				}else{
-					if(buffer != NULL){
-						free((void *)buffer);
-					}
-					buffer = (char *)malloc(257);
-					while((ret_val = read(read_write_fd, buffer, 256)) != 0){
-						if(ret_val == -1){
-							printf("\nDevice needs a Key or Message before Reading\n");
-							break;
-						}else if(ret_val < -1){
-							printf("\nError in read\n");				
-						}
-						count = count + ret_val;
-					}
-					
-					if(ret_val == 0){
-						buffer[count] = '\0';
-						printf("\nMessage: %s", buffer);
-					}
-					close(read_write_fd);
-				}
-				
-							
-				break;
+			//Writes to device, give device to be read from. Must be called before reading from device.
 			case 'W':
 				printf("\nEnter the name of the device you want to write to (cryptEncryptXX or cryptDecryptXX): ");
 				//fgets(dev, 15, stdin);
@@ -196,13 +154,54 @@ int main() {
 				}
 
 				break;
+			//Reads from device, give device to be read from. Can only be called after writing to the device.
+			case 'R':
+				
+				printf("\nEnter the name of the device you want to read from (cryptEncryptXX or cryptDecryptXX): ");
+				//fgets(dev, 15, stdin);
+				if(dev_path != NULL){
+					free(dev_path);
+				}
+				dev_path = (char*)malloc(20);
+				strcpy(dev_path, "/dev/");
+				scanf("%14s", dev);
+				fseek(stdin,0,SEEK_END);
+				strcat(dev_path, dev);
+				//printf("DEVPATH: %s\n", dev_path);
+				read_write_fd = open(dev_path,O_RDWR);
+				if(read_write_fd < 0){
+					printf("\nInvalid device name\n");
+				}else{
+					if(buffer != NULL){
+						free((void *)buffer);
+					}
+					buffer = (char *)malloc(257);
+					while((ret_val = read(read_write_fd, buffer, 256)) != 0){
+						if(ret_val == -1){
+							printf("\nDevice needs a Key or Message before Reading\n");
+							break;
+						}else if(ret_val < -1){
+							printf("\nError in read\n");				
+						}
+						count = count + ret_val;
+					}
+					
+					if(ret_val == 0){
+						buffer[count] = '\0';
+						printf("\nMessage: %s", buffer);
+					}
+					close(read_write_fd);
+				}		
+				break;
+			//Stops program
 			case 'B':
 				loop = 0;
 				break;
+			//If user presses enter, will not print out same instructions as before
 			case '\n': 
 				dont_print = 0;
 				break;
-			
+			//other
 			default:
 				printf("\nInvalid input\n");
 		}
