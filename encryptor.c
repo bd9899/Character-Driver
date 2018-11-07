@@ -34,7 +34,7 @@ typedef struct configure_input {
 static char table[] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N',
 'O','P','Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s',
 't','u','v','w','x','y','z', ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.' , '/', ':', ';', '<',
-'=', '>', '?', '`', '{', '}', '|', '~'};
+'=', '>', '?', '[', '\\', ']', '^', '_', '`', '{', '}', '|', '~'};
 
 int dev_major_number = 0;
 struct cryptctl_dev *cryptctl = NULL;
@@ -84,11 +84,11 @@ static void encrypt(char *key, char *message){
 	}
 	
 	for(i=0; i < message_len; i++){
-		for(j=0; j < 89; j++){
+		for(j=0; j < 94; j++){
 			if(message[i] == table[j]){
-				for(k=0; k < 89; k++){
+				for(k=0; k < 94; k++){
 					if(full_key[i] == table[k]){
-						message[i] = table[MOD((j+k),89)];
+						message[i] = table[MOD((j+k),94)];
 						break;
 					}
 				}
@@ -122,11 +122,11 @@ static void decrypt(char *key, char *message){
 	}
 	
 	for(i=0; i < message_len; i++){
-		for(j=0; j < 89; j++){
+		for(j=0; j < 94; j++){
 			if(message[i] == table[j]){
-				for(k=0; k < 89; k++){
+				for(k=0; k < 94; k++){
 					if(full_key[i] == table[k]){
-						message[i] = table[MOD((j-k),89)];
+						message[i] = table[MOD((j-k),94)];
 						break;
 					}
 				}
