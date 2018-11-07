@@ -37,7 +37,7 @@ int main() {
 	char *buffer = NULL;
 	char *dev_path = NULL;
 	char dev[15];
-	char type; //C - Create D - Destroy O - cOnfigure R - Read W - Write
+	char type[10]; //C - Create D - Destroy O - cOnfigure R - Read W - Write
 	ssize_t count = -1;
 	int dont_print = 1;
 	configure_input config = {0, ""};
@@ -55,9 +55,13 @@ int main() {
 			
 		}		
 		dont_print = 1;
-		scanf("%1c", &type);
+		scanf("%s", type);
 		fseek(stdin,0,SEEK_END);
-		switch (type) {
+		if (type[1] != '\0'){
+			printf("Please input only one character\n");
+			continue;
+		}
+		switch (*type) {
 			//Create devices, returns pair id
 			case 'C':
 				ret_val = ioctl(fd, CRYPT_CREATE, NULL);
