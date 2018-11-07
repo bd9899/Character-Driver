@@ -62,7 +62,7 @@ int main() {
 		}		
 		dont_print = 1;
 		scanf("%1c", &type);
-		fflush(stdin);
+		fseek(stdin,0,SEEK_END);
 		switch (type) {
 			case 'C':
 				ret_val = ioctl(fd, CRYPT_CREATE, NULL);
@@ -79,7 +79,7 @@ int main() {
 			case 'D':
 				printf("\nEnter the Encryption/Decryption Pair ID you want destroyed (0-9): ");
 				scanf("%d", &index);
-				fflush(stdin);
+				fseek(stdin,0,SEEK_END);
 				if (index < 0 || index > 10) {
 					printf("\nID is out of bounds\n");
 				}
@@ -96,7 +96,7 @@ int main() {
 			case 'O':
 				printf("\nEnter the ID of the pair you want configured (0-9): ");
 				scanf("%d", &index);
-				fflush(stdin);
+				fseek(stdin,0,SEEK_END);
 				if (index < 0 || index > 10) {
 					printf("\nIndex is out of bounds\n");
 				}
@@ -104,7 +104,7 @@ int main() {
 					printf("\nEnter the key to configure (32 char max, will be trimmed if longer): ");
 					//fgets(key, 33, stdin);
 					scanf("%32[^\n]s", key);
-					fflush(stdin);
+					fseek(stdin,0,SEEK_END);
 					strcpy(config.key, key);
 					config.index = index;
 					ret_val = ioctl(fd, CRYPT_CONFIGURE, &config);
@@ -126,7 +126,7 @@ int main() {
 				dev_path = (char*)malloc(20);
 				strcpy(dev_path, "/dev/");
 				scanf("%14s", dev);
-				fflush(stdin);
+				fseek(stdin,0,SEEK_END);
 				strcat(dev_path, dev);
 				//printf("DEVPATH: %s\n", dev_path);
 				read_write_fd = open(dev_path,O_RDWR);
@@ -165,7 +165,7 @@ int main() {
 				dev_path = (char*)malloc(20);
 				strcpy(dev_path, "/dev/");
 				scanf("%14s", dev);
-				fflush(stdin);
+				fseek(stdin,0,SEEK_END);
 				strcat(dev_path, dev);
 				//printf("DEVPATH: %s\n", dev_path);
 				
@@ -180,7 +180,7 @@ int main() {
 					printf("\nEnter a message to encrypt/decrypt (max length is 256): ");
 					//fgets(buffer, 257, stdin);
 					scanf("%256[^\n]s", buffer);
-					fflush(stdin);
+					fseek(stdin,0,SEEK_END);
 					while((ret_val = write(read_write_fd, buffer, strlen(buffer)+1)) != strlen(buffer)+1){
 						//printf("RET VAL: %ld\n", ret_val);
 						if(ret_val == -1){
