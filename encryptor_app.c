@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <err.h>
 #include <errno.h>
+#include <ctype.h>
 
 #define MAX_COUNT 20
 #define MAX_BUFFER_LENGTH 256
@@ -33,6 +34,7 @@ int main() {
 	int index;
 	int encrypt_decrypt;
 	long ret_val;
+	char temp;
 	char key[33];
 	char *buffer = NULL;
 	char *dev_path = NULL;
@@ -56,6 +58,7 @@ int main() {
 		}		
 		dont_print = 1;
 		scanf("%s", type);
+		while ((getchar()) != '\n');
 		fseek(stdin,0,SEEK_END);
 		if (type[1] != '\0'){
 			printf("Please input only one character\n");
@@ -78,8 +81,15 @@ int main() {
 			//Destroys devices, give index of pair id to be destroyed
 			case 'D':
 				printf("\nEnter the Encryption/Decryption Pair ID you want destroyed (0-9): ");
-				scanf("%d", &index);
-				fseek(stdin,0,SEEK_END);
+				scanf("%1c", &temp);
+				while ((getchar()) != '\n');
+				//fseek(stdin,0,SEEK_END);
+				if(isdigit(temp)){
+					index = temp - '0';
+				}else{
+					printf("Invalid input\n");
+					break;
+				}
 				if (index < 0 || index > 10) {
 					printf("\nID is out of bounds\n");
 				}
@@ -96,16 +106,25 @@ int main() {
 			//Configures devices, give index of pair id to be configured as well as the key for the pair
 			case 'O':
 				printf("\nEnter the ID of the pair you want configured (0-9): ");
-				scanf("%d", &index);
-				fseek(stdin,0,SEEK_END);
+				scanf("%1c", &temp);
+				while ((getchar()) != '\n');
+				//fseek(stdin,0,SEEK_END);
+				if(isdigit(temp)){
+					index = temp - '0';
+				}else{
+					printf("Invalid input\n");
+					break;
+				}
+				
 				if (index < 0 || index > 10) {
 					printf("\nIndex is out of bounds\n");
 				}
 				else {
 					printf("\nEnter the key to configure (32 char max, will be trimmed if longer): ");
 					//fgets(key, 33, stdin);
-					scanf("%32s", key);
-					fseek(stdin,0,SEEK_END);
+					scanf("%32[^\n]s", key);
+					//fseek(stdin,0,SEEK_END);
+					while ((getchar()) != '\n');
 					strcpy(config.key, key);
 					config.index = index;
 					ret_val = ioctl(fd, CRYPT_CONFIGURE, &config);
@@ -127,7 +146,8 @@ int main() {
 				dev_path = (char*)malloc(20);
 				strcpy(dev_path, "/dev/");
 				scanf("%14s", dev);
-				fseek(stdin,0,SEEK_END);
+				while ((getchar()) != '\n');
+				//fseek(stdin,0,SEEK_END);
 				strcat(dev_path, dev);
 				//printf("DEVPATH: %s\n", dev_path);
 				
@@ -141,8 +161,9 @@ int main() {
 					buffer = (char *)malloc(257);
 					printf("\nEnter a message to encrypt/decrypt (max length is 256): ");
 					//fgets(buffer, 257, stdin);
-					scanf("%256s", buffer);
-					fseek(stdin,0,SEEK_END);
+					scanf("%256[^\n]s", buffer);
+					while ((getchar()) != '\n');
+					//fseek(stdin,0,SEEK_END);
 					while((ret_val = write(read_write_fd, buffer, strlen(buffer)+1)) != strlen(buffer)+1){
 						//printf("RET VAL: %ld\n", ret_val);
 						if(ret_val == -1){
@@ -169,7 +190,8 @@ int main() {
 				dev_path = (char*)malloc(20);
 				strcpy(dev_path, "/dev/");
 				scanf("%14s", dev);
-				fseek(stdin,0,SEEK_END);
+				while ((getchar()) != '\n');
+				//fseek(stdin,0,SEEK_END);
 				strcat(dev_path, dev);
 				//printf("DEVPATH: %s\n", dev_path);
 				read_write_fd = open(dev_path,O_RDWR);
